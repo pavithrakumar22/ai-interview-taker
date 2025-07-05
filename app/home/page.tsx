@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { UserButton } from "@clerk/nextjs"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Brain, Play, History, TrendingUp, Target, Clock, BookOpen } from "lucide-react"
+import { Brain, Play, History, BookOpen, Target, Clock, TrendingUp } from "lucide-react"
 import Link from "next/link"
 
 interface UserStats {
@@ -98,17 +98,19 @@ export default function HomePage() {
             </CardContent>
           </Card>
 
-          {/* Performance Analytics */}
+          {/* Interview Preparation */}
           <Card className="hover:shadow-lg transition-shadow cursor-pointer">
             <CardHeader>
-              <TrendingUp className="h-8 w-8 text-purple-600 mb-2" />
-              <CardTitle>Performance Insights</CardTitle>
-              <CardDescription>Analyze your strengths and improvement areas</CardDescription>
+              <BookOpen className="h-8 w-8 text-purple-600 mb-2" />
+              <CardTitle>Interview Preparation</CardTitle>
+              <CardDescription>Study guides, tips, and practice questions</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" className="w-full bg-transparent" disabled>
-                Coming Soon
-              </Button>
+              <Link href="/interview/preparation">
+                <Button variant="outline" className="w-full bg-transparent">
+                  Start Preparing
+                </Button>
+              </Link>
             </CardContent>
           </Card>
         </div>

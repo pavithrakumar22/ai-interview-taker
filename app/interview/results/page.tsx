@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { ArrowLeft, Download, Home, RotateCcw, Loader2 } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ArrowLeft, Download, Home, RotateCcw, Loader2, AlertCircle } from "lucide-react"
 import Link from "next/link"
 
 interface InterviewResults {
@@ -33,6 +34,7 @@ export default function ResultsPage() {
   const [results, setResults] = useState<InterviewResults | null>(null)
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [pdfError, setPdfError] = useState<string | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -67,8 +69,11 @@ export default function ResultsPage() {
     if (!results) return
 
     setIsGeneratingPDF(true)
+    setPdfError(null)
 
     try {
+      console.log("🔄 Starting PDF generation...")
+
       const response = await fetch("/api/result/pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -87,18 +92,20 @@ export default function ResultsPage() {
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement("a")
         a.href = url
-        a.download = `interview-report-${Date.now()}.pdf`
+        a.download = `interview-report-${results.role}-${Date.now()}.pdf`
         document.body.appendChild(a)
         a.click()
         window.URL.revokeObjectURL(url)
         document.body.removeChild(a)
+        console.log("✅ PDF downloaded successfully")
       } else {
-        console.error("Failed to generate PDF")
-        alert("Failed to generate PDF. Please try again.")
+        const errorData = await response.json()
+        console.error("❌ PDF generation failed:", errorData)
+        setPdfError(errorData.details || "Failed to generate PDF. Please try again.")
       }
     } catch (error) {
-      console.error("Error generating PDF:", error)
-      alert("Error generating PDF. Please try again.")
+      console.error("❌ Error generating PDF:", error)
+      setPdfError("Network error occurred. Please check your connection and try again.")
     } finally {
       setIsGeneratingPDF(false)
     }
@@ -247,7 +254,13 @@ export default function ResultsPage() {
                 Get a comprehensive PDF report with all questions, answers, feedback, and recommendations
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {pdfError && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{pdfError}</AlertDescription>
+                </Alert>
+              )}
               <Button onClick={generatePDF} disabled={isGeneratingPDF} size="lg" className="w-full md:w-auto">
                 {isGeneratingPDF ? (
                   <>

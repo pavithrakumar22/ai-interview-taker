@@ -1,10 +1,12 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect, useRef } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Send, Loader2, CheckCircle } from "lucide-react"
 import Link from "next/link"
@@ -13,6 +15,14 @@ interface Message {
   id: string
   type: "question" | "answer"
   content: string
+}
+
+interface InterviewQA {
+  question: string
+  userAnswer: string
+  score: string
+  feedback: string
+  idealAnswer: string
 }
 
 interface InterviewState {
@@ -25,6 +35,7 @@ interface InterviewState {
   questionCount: number
   projects: string[]
   isComplete: boolean
+  qaHistory: InterviewQA[]
 }
 
 export default function InterviewChat() {
@@ -42,8 +53,10 @@ export default function InterviewChat() {
     questionCount: 0,
     projects: [],
     isComplete: false,
+    qaHistory: [],
   })
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -52,6 +65,14 @@ export default function InterviewChat() {
   useEffect(() => {
     scrollToBottom()
   }, [interviewData.messages])
+
+  useEffect(() => {
+    // Auto-resize textarea
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto"
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
+    }
+  }, [input])
 
   useEffect(() => {
     // Start the interview by getting the first question
@@ -132,6 +153,20 @@ export default function InterviewChat() {
 
       const data = await response.json()
 
+      // Store the Q&A with actual AI feedback
+      const newQA: InterviewQA = {
+        question: currentQuestion,
+        userAnswer: userAnswer,
+        score: data.score || "7",
+        feedback: data.feedback || "Good answer provided.",
+        idealAnswer: data.idealAnswer || "A comprehensive answer covering the key concepts.",
+      }
+
+      setInterviewData((prev) => ({
+        ...prev,
+        qaHistory: [...prev.qaHistory, newQA],
+      }))
+
       // Check if we should continue or end the interview
       const shouldContinue = data.nextQuestion
 
@@ -165,6 +200,7 @@ export default function InterviewChat() {
           ...interviewData,
           questionCount: interviewData.questionCount + 1,
           isComplete: true,
+          qaHistory: [...interviewData.qaHistory, newQA],
         }
         setInterviewData(updatedData)
         await saveInterviewResults(updatedData)
@@ -178,47 +214,23 @@ export default function InterviewChat() {
 
   // Helper function to extract project names
   const extractProjectNames = (answer: string): string[] => {
-    // Simple extraction - you can make this more sophisticated
     const projects = answer
       .split(/[,\n]/)
       .map((p) => p.trim())
       .filter((p) => p.length > 0)
-    return projects.slice(0, 3) // Limit to 3 projects
+    return projects.slice(0, 3)
   }
 
   const saveInterviewResults = async (finalData: InterviewState) => {
     try {
       console.log("💾 Saving interview results...")
 
-      // Format interview data for backend
-      const interviewResults = []
-
-      for (let i = 0; i < finalData.messages.length; i += 2) {
-        const questionMessage = finalData.messages[i]
-        const answerMessage = finalData.messages[i + 1]
-
-        if (
-          questionMessage &&
-          answerMessage &&
-          questionMessage.type === "question" &&
-          answerMessage.type === "answer"
-        ) {
-          interviewResults.push({
-            question: questionMessage.content,
-            userAnswer: answerMessage.content,
-            score: Math.floor(Math.random() * 4) + 6, // Random score 6-10 for demo
-            feedback: "AI feedback will be generated based on your answer.",
-            idealAnswer: "Ideal answer will be provided by the AI system.",
-          })
-        }
-      }
-
       const resultData = {
         role: finalData.domain,
         techs: finalData.techs,
         projects: finalData.projects,
         experience: finalData.experience,
-        interview: interviewResults,
+        interview: finalData.qaHistory, // Use the actual Q&A history with AI responses
       }
 
       console.log("📤 Sending data to API:", resultData)
@@ -238,7 +250,6 @@ export default function InterviewChat() {
       const savedResult = await response.json()
       console.log("✅ Interview saved successfully:", savedResult)
 
-      // Store the result ID for the results page
       localStorage.setItem("interviewResultId", savedResult._id || "")
     } catch (error) {
       console.error("❌ Error saving interview results:", error)
@@ -248,6 +259,13 @@ export default function InterviewChat() {
 
   const handleViewResults = () => {
     router.push("/interview/results")
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmitAnswer()
+    }
   }
 
   return (
@@ -320,21 +338,35 @@ export default function InterviewChat() {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Input Area */}
+              {/* Input Area - v0 Style */}
               <div className="flex-shrink-0">
                 {!interviewData.isComplete ? (
-                  <div className="flex space-x-2">
-                    <Input
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      placeholder="Type your answer here..."
-                      onKeyPress={(e) => e.key === "Enter" && !e.shiftKey && handleSubmitAnswer()}
-                      disabled={isLoading}
-                      className="flex-1"
-                    />
-                    <Button onClick={handleSubmitAnswer} disabled={isLoading || !input.trim()}>
-                      <Send className="h-4 w-4" />
-                    </Button>
+                  <div className="relative">
+                    <div className="flex items-end space-x-2 p-3 border rounded-lg bg-white dark:bg-gray-800">
+                      <Textarea
+                        ref={textareaRef}
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Type your answer here... (Press Enter to send, Shift+Enter for new line)"
+                        disabled={isLoading}
+                        className="flex-1 min-h-[60px] max-h-[200px] resize-none border-0 bg-transparent focus:ring-0 focus:outline-none"
+                        style={{ height: "auto" }}
+                      />
+                      <Button
+                        onClick={handleSubmitAnswer}
+                        disabled={isLoading || !input.trim()}
+                        size="sm"
+                        className="mb-1"
+                      >
+                        <Send className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1 px-1">
+                      Press <kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">Enter</kbd> to
+                      send, <kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">Shift+Enter</kbd>{" "}
+                      for new line
+                    </div>
                   </div>
                 ) : (
                   <div className="text-center space-y-4 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
