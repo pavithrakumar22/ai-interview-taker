@@ -171,7 +171,7 @@ export default function ResultsPage() {
           <Card className="mb-8">
             <CardHeader>
               <CardTitle className="text-2xl">Interview Results</CardTitle>
-              <CardDescription>Here's how you performed in your {results.role} interview</CardDescription>
+              <CardDescription>Here&apos;ts how you performed in your {results.role} interview</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2 mb-4">

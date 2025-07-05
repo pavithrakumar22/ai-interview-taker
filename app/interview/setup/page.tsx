@@ -132,7 +132,7 @@ export default function InterviewSetup() {
     }
   }
 
-  const selectedDomainData = domains.find((d) => d.value === selectedDomain)
+  // const selectedDomainData = domains.find((d) => d.value === selectedDomain)
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">

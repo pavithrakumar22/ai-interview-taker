@@ -181,7 +181,7 @@ export default function HomePage() {
                 <ul className="text-sm text-gray-600 dark:text-gray-300 space-y-1">
                   <li>• Take your time to think before answering</li>
                   <li>• Provide specific examples when possible</li>
-                  <li>• Don't hesitate to ask for clarification</li>
+                  <li>• Don&apos;tt hesitate to ask for clarification</li>
                 </ul>
               </div>
             </div>

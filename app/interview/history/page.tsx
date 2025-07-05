@@ -123,7 +123,7 @@ export default function InterviewHistoryPage() {
           {stats?.uniqueDomains && stats.uniqueDomains.length > 0 && (
             <Card className="mb-8">
               <CardHeader>
-                <CardTitle>Domains You've Practiced</CardTitle>
+                <CardTitle>Domains You&apos;tve Practiced</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-2">

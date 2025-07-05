@@ -138,8 +138,13 @@ export default function InterviewPreparation() {
       [id]: !prev[id],
     }))
   }
+  type TopicCategory = {
+  category: string
+  topics: string[]
+}
 
-  const getProgress = (topics: any[]) => {
+
+  const getProgress = (topics: TopicCategory[]) => {
     const totalItems = topics.reduce((sum, category) => sum + category.topics.length, 0)
     const checkedCount = topics.reduce(
       (sum, category) =>
@@ -351,7 +356,7 @@ export default function InterviewPreparation() {
                       <li>• Review your resume and be ready to discuss projects</li>
                       <li>• Practice coding problems on a whiteboard</li>
                       <li>• Prepare questions to ask the interviewer</li>
-                      <li>• Get a good night's sleep</li>
+                      <li>• Get a good night&apos;ts sleep</li>
                     </ul>
                   </CardContent>
                 </Card>
@@ -403,7 +408,7 @@ export default function InterviewPreparation() {
                     <ul className="space-y-2 text-sm">
                       <li>• Be enthusiastic and show genuine interest</li>
                       <li>• Use the STAR method for behavioral questions</li>
-                      <li>• Admit when you don't know something</li>
+                      <li>• Admit when you don&apos;tt know something</li>
                       <li>• Show your problem-solving process</li>
                       <li>• Follow up with thoughtful questions</li>
                     </ul>
