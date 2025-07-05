@@ -120,3 +120,42 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Fix cursor issues */
+button {
+  cursor: pointer !important;
+}
+
+button:disabled {
+  cursor: not-allowed !important;
+}
+
+.cursor-pointer {
+  cursor: pointer !important;
+}
+
+a {
+  cursor: pointer !important;
+}
+
+/* Ensure all interactive elements have proper cursor */
+[role="button"],
+.clickable,
+input[type="button"],
+input[type="submit"],
+input[type="reset"] {
+  cursor: pointer !important;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+textarea,
+select {
+  cursor: text !important;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  cursor: pointer !important;
+}

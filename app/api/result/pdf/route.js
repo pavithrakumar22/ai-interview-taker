@@ -1,4 +1,4 @@
-import { generatePDF } from "../../../lib/pdfBuilder.js";
+import { generatePDF } from "../../../../lib/pdfBuilder.js";
 
 export async function POST(req) {
   try {

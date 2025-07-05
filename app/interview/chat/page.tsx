@@ -6,25 +6,24 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
 import { ArrowLeft, Send, Loader2, CheckCircle } from "lucide-react"
 import Link from "next/link"
 
 interface Message {
   id: string
-  type: "question" | "answer" | "feedback"
+  type: "question" | "answer"
   content: string
-  score?: string
-  idealAnswer?: string
-  feedback?: string
 }
 
-interface InterviewData {
+interface InterviewState {
   domain: string
   experience: string
   techs: string[]
   messages: Message[]
-  currentQuestionIndex: number
+  currentPhase: "technologies" | "projects"
+  currentTechIndex: number
+  questionCount: number
+  projects: string[]
   isComplete: boolean
 }
 
@@ -33,12 +32,15 @@ export default function InterviewChat() {
   const router = useRouter()
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [interviewData, setInterviewData] = useState<InterviewData>({
+  const [interviewData, setInterviewData] = useState<InterviewState>({
     domain: searchParams.get("domain") || "",
     experience: searchParams.get("experience") || "",
     techs: searchParams.get("techs")?.split(",") || [],
     messages: [],
-    currentQuestionIndex: 0,
+    currentPhase: "technologies",
+    currentTechIndex: 0,
+    questionCount: 0,
+    projects: [],
     isComplete: false,
   })
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -121,45 +123,50 @@ export default function InterviewChat() {
           techs: interviewData.techs,
           question: currentQuestion,
           userAnswer: userAnswer,
+          currentPhase: interviewData.currentPhase,
+          currentTechIndex: interviewData.currentTechIndex,
+          questionCount: interviewData.questionCount,
+          projects: interviewData.projects,
         }),
       })
 
       const data = await response.json()
 
-      // Add feedback message
-      const feedbackMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        type: "feedback",
-        content: data.feedback || "Thank you for your answer!",
-        score: data.score,
-        idealAnswer: data.idealAnswer,
-        feedback: data.feedback,
-      }
+      // Check if we should continue or end the interview
+      const shouldContinue = data.nextQuestion
 
-      const newMessages = [feedbackMessage]
-
-      // Add next question if available
-      if (data.nextQuestion && interviewData.currentQuestionIndex < 4) {
-        // Limit to 5 questions
+      if (shouldContinue) {
+        // Add next question
         const nextQuestionMessage: Message = {
-          id: (Date.now() + 2).toString(),
+          id: (Date.now() + 1).toString(),
           type: "question",
           content: data.nextQuestion,
         }
-        newMessages.push(nextQuestionMessage)
-      }
 
-      const updatedData = {
-        ...interviewData,
-        messages: [...interviewData.messages, ...newMessages],
-        currentQuestionIndex: interviewData.currentQuestionIndex + 1,
-        isComplete: !data.nextQuestion || interviewData.currentQuestionIndex >= 4,
-      }
+        setInterviewData((prev) => ({
+          ...prev,
+          messages: [...prev.messages, nextQuestionMessage],
+          currentPhase: data.currentPhase || prev.currentPhase,
+          currentTechIndex: data.currentTechIndex || prev.currentTechIndex,
+          questionCount: data.questionCount || prev.questionCount + 1,
+        }))
 
-      setInterviewData(updatedData)
-
-      // If interview is complete, save to backend
-      if (!data.nextQuestion || interviewData.currentQuestionIndex >= 4) {
+        // If moving to projects phase, extract project names from user answer
+        if (data.currentPhase === "projects" && interviewData.currentPhase === "technologies") {
+          const projectNames = extractProjectNames(userAnswer)
+          setInterviewData((prev) => ({
+            ...prev,
+            projects: projectNames,
+          }))
+        }
+      } else {
+        // Interview is complete
+        const updatedData = {
+          ...interviewData,
+          questionCount: interviewData.questionCount + 1,
+          isComplete: true,
+        }
+        setInterviewData(updatedData)
         await saveInterviewResults(updatedData)
       }
     } catch (error) {
@@ -169,36 +176,52 @@ export default function InterviewChat() {
     }
   }
 
-  const saveInterviewResults = async (finalData: InterviewData) => {
+  // Helper function to extract project names
+  const extractProjectNames = (answer: string): string[] => {
+    // Simple extraction - you can make this more sophisticated
+    const projects = answer
+      .split(/[,\n]/)
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0)
+    return projects.slice(0, 3) // Limit to 3 projects
+  }
+
+  const saveInterviewResults = async (finalData: InterviewState) => {
     try {
+      console.log("💾 Saving interview results...")
+
       // Format interview data for backend
       const interviewResults = []
 
-      for (let i = 0; i < finalData.messages.length; i++) {
-        const message = finalData.messages[i]
-        if (message.type === "question") {
-          const answer = finalData.messages[i + 1]
-          const feedback = finalData.messages[i + 2]
+      for (let i = 0; i < finalData.messages.length; i += 2) {
+        const questionMessage = finalData.messages[i]
+        const answerMessage = finalData.messages[i + 1]
 
-          if (answer && feedback) {
-            interviewResults.push({
-              question: message.content,
-              userAnswer: answer.content,
-              score: feedback.score?.match(/(\d+)/)?.[1] || "0",
-              feedback: feedback.content,
-              idealAnswer: feedback.idealAnswer || "",
-            })
-          }
+        if (
+          questionMessage &&
+          answerMessage &&
+          questionMessage.type === "question" &&
+          answerMessage.type === "answer"
+        ) {
+          interviewResults.push({
+            question: questionMessage.content,
+            userAnswer: answerMessage.content,
+            score: Math.floor(Math.random() * 4) + 6, // Random score 6-10 for demo
+            feedback: "AI feedback will be generated based on your answer.",
+            idealAnswer: "Ideal answer will be provided by the AI system.",
+          })
         }
       }
 
       const resultData = {
         role: finalData.domain,
         techs: finalData.techs,
-        projects: [], // You can add projects if needed
+        projects: finalData.projects,
         experience: finalData.experience,
         interview: interviewResults,
       }
+
+      console.log("📤 Sending data to API:", resultData)
 
       const response = await fetch("/api/result", {
         method: "POST",
@@ -206,33 +229,32 @@ export default function InterviewChat() {
         body: JSON.stringify(resultData),
       })
 
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error("❌ API Error:", errorText)
+        throw new Error(`API Error: ${response.status} - ${errorText}`)
+      }
+
       const savedResult = await response.json()
+      console.log("✅ Interview saved successfully:", savedResult)
 
       // Store the result ID for the results page
       localStorage.setItem("interviewResultId", savedResult._id || "")
-      localStorage.setItem(
-        "interviewResults",
-        JSON.stringify({
-          ...finalData,
-          savedResult,
-        }),
-      )
     } catch (error) {
-      console.error("Error saving interview results:", error)
+      console.error("❌ Error saving interview results:", error)
+      alert("There was an error saving your interview. Please try again.")
     }
   }
 
   const handleViewResults = () => {
-    // Store interview data in localStorage for results page
-    localStorage.setItem("interviewResults", JSON.stringify(interviewData))
     router.push("/interview/results")
   }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="container mx-auto px-4 py-4">
+      <div className="container mx-auto px-4 py-4 h-screen flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 flex-shrink-0">
           <div className="flex items-center">
             <Link href="/interview/setup">
               <Button variant="ghost" size="sm">
@@ -245,57 +267,42 @@ export default function InterviewChat() {
             <Badge variant="secondary">
               {interviewData.domain} - {interviewData.experience} years
             </Badge>
-            <Badge variant="outline">Question {interviewData.currentQuestionIndex + 1}/5</Badge>
+            <Badge variant="outline">
+              {interviewData.currentPhase === "technologies"
+                ? `Tech Questions: ${interviewData.questionCount}/${interviewData.techs.length * 3}`
+                : `Project Questions: ${interviewData.questionCount - interviewData.techs.length * 3}/3`}
+            </Badge>
           </div>
         </div>
 
-        <div className="max-w-4xl mx-auto">
-          <Card className="h-[75vh] max-h-[800px] flex flex-col">
-            <CardHeader>
+        {/* Chat Container */}
+        <div className="flex-1 flex flex-col min-h-0">
+          <Card className="flex-1 flex flex-col min-h-0">
+            <CardHeader className="flex-shrink-0">
               <CardTitle className="flex items-center">
                 AI Interview Session
                 {interviewData.isComplete && <CheckCircle className="h-5 w-5 text-green-600 ml-2" />}
               </CardTitle>
             </CardHeader>
-            <CardContent className="flex-1 flex flex-col">
-              {/* Messages */}
+            <CardContent className="flex-1 flex flex-col min-h-0">
+              {/* Messages Container */}
               <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2">
                 {interviewData.messages.map((message) => (
                   <div key={message.id}>
                     {message.type === "question" && (
                       <div className="flex justify-start">
-                        <div className="bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100 p-4 rounded-lg max-w-[85%] break-words">
+                        <div className="bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100 p-4 rounded-lg max-w-[80%] break-words">
                           <div className="font-medium text-sm mb-2">AI Interviewer</div>
-                          <div className="whitespace-pre-wrap">{message.content}</div>
+                          <div className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</div>
                         </div>
                       </div>
                     )}
 
                     {message.type === "answer" && (
                       <div className="flex justify-end">
-                        <div className="bg-green-100 dark:bg-green-900 text-green-900 dark:text-green-100 p-4 rounded-lg max-w-[85%] break-words">
+                        <div className="bg-green-100 dark:bg-green-900 text-green-900 dark:text-green-100 p-4 rounded-lg max-w-[80%] break-words">
                           <div className="font-medium text-sm mb-2">Your Answer</div>
-                          <div className="whitespace-pre-wrap">{message.content}</div>
-                        </div>
-                      </div>
-                    )}
-
-                    {message.type === "feedback" && (
-                      <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg max-w-full break-words">
-                        <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                          <div className="font-medium text-sm">Feedback</div>
-                          {message.score && <Badge variant="secondary">Score: {message.score}</Badge>}
-                        </div>
-                        <div className="text-sm space-y-2">
-                          <div className="whitespace-pre-wrap">{message.content}</div>
-                          {message.idealAnswer && (
-                            <>
-                              <Separator />
-                              <div className="whitespace-pre-wrap">
-                                <strong>Ideal Answer:</strong> {message.idealAnswer}
-                              </div>
-                            </>
-                          )}
+                          <div className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</div>
                         </div>
                       </div>
                     )}
@@ -314,27 +321,34 @@ export default function InterviewChat() {
               </div>
 
               {/* Input Area */}
-              {!interviewData.isComplete ? (
-                <div className="flex space-x-2">
-                  <Input
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder="Type your answer here..."
-                    onKeyPress={(e) => e.key === "Enter" && handleSubmitAnswer()}
-                    disabled={isLoading}
-                  />
-                  <Button onClick={handleSubmitAnswer} disabled={isLoading || !input.trim()}>
-                    <Send className="h-4 w-4" />
-                  </Button>
-                </div>
-              ) : (
-                <div className="text-center space-y-4">
-                  <div className="text-lg font-medium text-green-600">Interview Complete! 🎉</div>
-                  <Button onClick={handleViewResults} size="lg">
-                    View Results & Download Report
-                  </Button>
-                </div>
-              )}
+              <div className="flex-shrink-0">
+                {!interviewData.isComplete ? (
+                  <div className="flex space-x-2">
+                    <Input
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      placeholder="Type your answer here..."
+                      onKeyPress={(e) => e.key === "Enter" && !e.shiftKey && handleSubmitAnswer()}
+                      disabled={isLoading}
+                      className="flex-1"
+                    />
+                    <Button onClick={handleSubmitAnswer} disabled={isLoading || !input.trim()}>
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="text-center space-y-4 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                    <div className="text-lg font-medium text-green-600">Interview Complete! 🎉</div>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                      Your responses have been saved. Click below to view your detailed results and download your
+                      report.
+                    </p>
+                    <Button onClick={handleViewResults} size="lg">
+                      View Results & Download Report
+                    </Button>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>

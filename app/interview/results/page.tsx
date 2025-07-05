@@ -6,72 +6,80 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Separator } from "@/components/ui/separator"
-import { ArrowLeft, Download, Home, RotateCcw } from "lucide-react"
+import { ArrowLeft, Download, Home, RotateCcw, Loader2 } from "lucide-react"
 import Link from "next/link"
 
 interface InterviewResults {
-  domain: string
+  _id: string
+  role: string
   experience: string
   techs: string[]
-  messages: any[]
-  currentQuestionIndex: number
-  isComplete: boolean
+  averageScore: string
+  totalQuestions: number
+  summary: {
+    strengths: string
+    weaknesses: string
+  }
+  fullInterview: Array<{
+    question: string
+    userAnswer: string
+    score: string
+    feedback: string
+    idealAnswer: string
+  }>
 }
 
 export default function ResultsPage() {
   const [results, setResults] = useState<InterviewResults | null>(null)
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
   useEffect(() => {
-    const storedResults = localStorage.getItem("interviewResults")
-    if (storedResults) {
-      setResults(JSON.parse(storedResults))
-    } else {
-      router.push("/home")
+    const fetchResults = async () => {
+      try {
+        const interviewId = localStorage.getItem("interviewResultId")
+        if (!interviewId) {
+          router.push("/home")
+          return
+        }
+
+        const response = await fetch(`/api/my-results?id=${interviewId}`)
+        if (response.ok) {
+          const data = await response.json()
+          setResults(data)
+        } else {
+          console.error("Failed to fetch results")
+          router.push("/home")
+        }
+      } catch (error) {
+        console.error("Error fetching results:", error)
+        router.push("/home")
+      } finally {
+        setIsLoading(false)
+      }
     }
+
+    fetchResults()
   }, [router])
 
-  const calculateStats = () => {
-    if (!results) return { averageScore: 0, totalQuestions: 0, answeredQuestions: 0 }
-
-    const feedbackMessages = results.messages.filter((m) => m.type === "feedback" && m.score)
-    const scores = feedbackMessages.map((m) => {
-      const scoreMatch = m.score?.match(/(\d+)/)
-      return scoreMatch ? Number.parseInt(scoreMatch[1]) : 0
-    })
-
-    const averageScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0
-    const totalQuestions = results.messages.filter((m) => m.type === "question").length
-    const answeredQuestions = results.messages.filter((m) => m.type === "answer").length
-
-    return { averageScore, totalQuestions, answeredQuestions }
-  }
-
   const generatePDF = async () => {
+    if (!results) return
+
     setIsGeneratingPDF(true)
 
     try {
-      if (!results) return
-
-      // Format data for PDF generation
-      const pdfData = {
-        role: results.domain,
-        techs: results.techs,
-        experience: results.experience,
-        interview: formatInterviewForPDF(results.messages),
-        summary: {
-          totalQuestions: calculateStats().totalQuestions,
-          averageScore: calculateStats().averageScore,
-          answeredQuestions: calculateStats().answeredQuestions,
-        },
-      }
-
       const response = await fetch("/api/result/pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(pdfData),
+        body: JSON.stringify({
+          role: results.role,
+          techs: results.techs,
+          experience: results.experience,
+          averageScore: results.averageScore,
+          summary: results.summary,
+          interview: results.fullInterview,
+        }),
       })
 
       if (response.ok) {
@@ -86,90 +94,41 @@ export default function ResultsPage() {
         document.body.removeChild(a)
       } else {
         console.error("Failed to generate PDF")
+        alert("Failed to generate PDF. Please try again.")
       }
     } catch (error) {
       console.error("Error generating PDF:", error)
+      alert("Error generating PDF. Please try again.")
     } finally {
       setIsGeneratingPDF(false)
     }
   }
 
-  const formatInterviewForPDF = (messages: any[]) => {
-    const interviewData = []
-
-    for (let i = 0; i < messages.length; i++) {
-      const message = messages[i]
-      if (message.type === "question") {
-        const answer = messages[i + 1]
-        const feedback = messages[i + 2]
-
-        if (answer && feedback) {
-          interviewData.push({
-            question: message.content,
-            userAnswer: answer.content,
-            score: feedback.score?.match(/(\d+)/)?.[1] || "0",
-            feedback: feedback.content,
-            idealAnswer: feedback.idealAnswer || "",
-          })
-        }
-      }
-    }
-
-    return interviewData
-  }
-
-  const generatePDFContent = () => {
-    if (!results) return ""
-
-    const stats = calculateStats()
-    let content = `AI INTERVIEW REPORT\n`
-    content += `==================\n\n`
-    content += `Domain: ${results.domain}\n`
-    content += `Experience Level: ${results.experience} years\n`
-    content += `Technologies: ${results.techs.join(", ")}\n`
-    content += `Date: ${new Date().toLocaleDateString()}\n\n`
-    content += `PERFORMANCE SUMMARY\n`
-    content += `==================\n`
-    content += `Questions Answered: ${stats.answeredQuestions}/${stats.totalQuestions}\n`
-    content += `Average Score: ${stats.averageScore.toFixed(1)}/10\n\n`
-    content += `DETAILED FEEDBACK\n`
-    content += `================\n\n`
-
-    let questionNumber = 1
-    for (let i = 0; i < results.messages.length; i++) {
-      const message = results.messages[i]
-      if (message.type === "question") {
-        content += `Question ${questionNumber}: ${message.content}\n`
-
-        // Find corresponding answer and feedback
-        const answer = results.messages[i + 1]
-        const feedback = results.messages[i + 2]
-
-        if (answer && answer.type === "answer") {
-          content += `Your Answer: ${answer.content}\n`
-        }
-
-        if (feedback && feedback.type === "feedback") {
-          content += `Score: ${feedback.score || "N/A"}\n`
-          content += `Feedback: ${feedback.content}\n`
-          if (feedback.idealAnswer) {
-            content += `Ideal Answer: ${feedback.idealAnswer}\n`
-          }
-        }
-
-        content += `\n${"-".repeat(50)}\n\n`
-        questionNumber++
-      }
-    }
-
-    return content
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p>Loading your results...</p>
+        </div>
+      </div>
+    )
   }
 
   if (!results) {
-    return <div>Loading...</div>
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <p>No results found. Please take an interview first.</p>
+          <Link href="/home">
+            <Button className="mt-4">Go to Dashboard</Button>
+          </Link>
+        </div>
+      </div>
+    )
   }
 
-  const stats = calculateStats()
+  const averageScore = Number.parseFloat(results.averageScore) || 0
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -205,11 +164,11 @@ export default function ResultsPage() {
           <Card className="mb-8">
             <CardHeader>
               <CardTitle className="text-2xl">Interview Results</CardTitle>
-              <CardDescription>Here's how you performed in your {results.domain} interview</CardDescription>
+              <CardDescription>Here's how you performed in your {results.role} interview</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2 mb-4">
-                <Badge variant="secondary">{results.domain}</Badge>
+                <Badge variant="secondary">{results.role}</Badge>
                 <Badge variant="outline">{results.experience} years experience</Badge>
                 {results.techs.map((tech) => (
                   <Badge key={tech} variant="outline">
@@ -227,8 +186,8 @@ export default function ResultsPage() {
                 <CardTitle className="text-lg">Overall Score</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-blue-600 mb-2">{stats.averageScore.toFixed(1)}/10</div>
-                <Progress value={stats.averageScore * 10} className="mb-2" />
+                <div className="text-3xl font-bold text-blue-600 mb-2">{averageScore.toFixed(1)}/10</div>
+                <Progress value={averageScore * 10} className="mb-2" />
                 <p className="text-sm text-gray-600 dark:text-gray-300">Average across all questions</p>
               </CardContent>
             </Card>
@@ -238,11 +197,9 @@ export default function ResultsPage() {
                 <CardTitle className="text-lg">Questions Completed</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-green-600 mb-2">
-                  {stats.answeredQuestions}/{stats.totalQuestions}
-                </div>
-                <Progress value={(stats.answeredQuestions / stats.totalQuestions) * 100} className="mb-2" />
-                <p className="text-sm text-gray-600 dark:text-gray-300">Interview completion rate</p>
+                <div className="text-3xl font-bold text-green-600 mb-2">{results.totalQuestions}</div>
+                <Progress value={100} className="mb-2" />
+                <p className="text-sm text-gray-600 dark:text-gray-300">Interview completed</p>
               </CardContent>
             </Card>
 
@@ -252,11 +209,11 @@ export default function ResultsPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold text-purple-600 mb-2">
-                  {stats.averageScore >= 8
+                  {averageScore >= 8
                     ? "Excellent"
-                    : stats.averageScore >= 6
+                    : averageScore >= 6
                       ? "Good"
-                      : stats.averageScore >= 4
+                      : averageScore >= 4
                         ? "Fair"
                         : "Needs Improvement"}
                 </div>
@@ -265,71 +222,38 @@ export default function ResultsPage() {
             </Card>
           </div>
 
-          {/* Detailed Feedback */}
+          {/* Summary */}
           <Card className="mb-8">
             <CardHeader>
-              <CardTitle>Detailed Question Review</CardTitle>
+              <CardTitle>Performance Summary</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {results.messages.map((message, index) => {
-                if (message.type === "question") {
-                  const answer = results.messages[index + 1]
-                  const feedback = results.messages[index + 2]
-                  const questionNumber =
-                    results.messages.slice(0, index).filter((m) => m.type === "question").length + 1
-
-                  return (
-                    <div key={message.id} className="space-y-3">
-                      <div className="font-medium text-blue-600">
-                        Question {questionNumber}: {message.content}
-                      </div>
-
-                      {answer && answer.type === "answer" && (
-                        <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded">
-                          <div className="font-medium text-sm text-green-700 dark:text-green-300 mb-1">
-                            Your Answer:
-                          </div>
-                          <div className="text-sm">{answer.content}</div>
-                        </div>
-                      )}
-
-                      {feedback && feedback.type === "feedback" && (
-                        <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded space-y-2">
-                          <div className="flex items-center justify-between">
-                            <div className="font-medium text-sm">Feedback:</div>
-                            {feedback.score && <Badge variant="secondary">Score: {feedback.score}</Badge>}
-                          </div>
-                          <div className="text-sm">{feedback.content}</div>
-                          {feedback.idealAnswer && (
-                            <>
-                              <Separator />
-                              <div className="text-sm">
-                                <strong>Ideal Answer:</strong> {feedback.idealAnswer}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      )}
-
-                      {index < results.messages.length - 1 && <Separator />}
-                    </div>
-                  )
-                }
-                return null
-              })}
+            <CardContent className="space-y-4">
+              <div>
+                <h4 className="font-medium text-green-700 dark:text-green-300 mb-2">Strengths</h4>
+                <p className="text-sm text-gray-700 dark:text-gray-300">{results.summary.strengths}</p>
+              </div>
+              <div>
+                <h4 className="font-medium text-red-700 dark:text-red-300 mb-2">Areas for Improvement</h4>
+                <p className="text-sm text-gray-700 dark:text-gray-300">{results.summary.weaknesses}</p>
+              </div>
             </CardContent>
           </Card>
 
           {/* Download Report */}
           <Card>
             <CardHeader>
-              <CardTitle>Download Report</CardTitle>
-              <CardDescription>Get a detailed PDF report of your interview performance</CardDescription>
+              <CardTitle>Download Detailed Report</CardTitle>
+              <CardDescription>
+                Get a comprehensive PDF report with all questions, answers, feedback, and recommendations
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <Button onClick={generatePDF} disabled={isGeneratingPDF} size="lg" className="w-full md:w-auto">
                 {isGeneratingPDF ? (
-                  <>Generating Report...</>
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Generating Report...
+                  </>
                 ) : (
                   <>
                     <Download className="h-4 w-4 mr-2" />
